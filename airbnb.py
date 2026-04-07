@@ -65,10 +65,8 @@ with tab1:
         - Ontbrekende waarden in **reviews_per_month** zijn ingevuld met `0`.
         - Ontbrekende waarden in **last_review** zijn behouden, omdat dit waarschijnlijk betekent dat een listing nog geen reviews heeft.
         - Listings met **price = 0** zijn verwijderd.
-        - Extreme uitschieters in **price** zijn weggefilterd.
+        - Extreme uitschieters(>1000) in **price** zijn weggefilterd.
         - Onrealistische waarden in **minimum_nights** zijn verwijderd.
-        - Coördinaten zijn gecontroleerd en bevestigd als locaties binnen New York City.
-        - De dataset met metrostations is teruggebracht tot de meest relevante kolommen en gecontroleerd op duplicaten en ontbrekende waarden.
         """
     )
 
@@ -518,9 +516,9 @@ with tab4:
 
         c1, c2 = st.columns(2)
         with c1:
-            st.success(f"Aanbevolen prijsbereik: ${q25:.0f} - ${q75:.0f} per nacht")
+            st.success(f"Aanbevolen prijsbereik: \\${q25:.0f} - \\${q75:.0f} per nacht")
         with c2:
-            st.info(f"Referentieprijs: ${median_price:.0f} per nacht")
+            st.info(f"Referentieprijs: \\${median_price:.0f} per nacht")
 
         st.markdown("## Vergelijkbare listings")
 
