@@ -65,7 +65,7 @@ with tab1:
         - Ontbrekende waarden in **reviews_per_month** zijn ingevuld met `0`.
         - Ontbrekende waarden in **last_review** zijn behouden, omdat dit waarschijnlijk betekent dat een listing nog geen reviews heeft.
         - Listings met **price = 0** zijn verwijderd.
-        - Extreme uitschieters(>1000) in **price** zijn weggefilterd.
+        - Extreme uitschieters(>=500) in **price** zijn weggefilterd.
         - Onrealistische waarden in **minimum_nights** zijn verwijderd.
         """
     )
@@ -88,13 +88,9 @@ with tab1:
 
     feature_cols = [
         "price",
-        "neighbourhood_group",
-        "room_type",
         "price_level_in_hood",
         "nearest_station_distance_km",
         "nearest_station",
-        "nearest_station_borough",
-        "nearest_station_ada",
         "nearest_station_route_count",
         "distance_category"
     ]
@@ -105,6 +101,8 @@ with tab1:
 with tab2:
     st.subheader("Prijsanalyse")
 
+
+#### 1e plot
     distance_order = ["0-250m", "250-500m", "500-1000m", "1-2km", ">2km"]
 
     fig_box = px.box(
@@ -113,6 +111,10 @@ with tab2:
         y="price",
         color="distance_category",
         category_orders={"distance_category": distance_order},
+        labels={
+        "distance_category_nl": "Afstandscategorie",
+        "price": "Prijs"
+        },
         title="Prijs per afstandscategorie"
     )
 
@@ -123,6 +125,8 @@ with tab2:
 
     st.plotly_chart(fig_box, use_container_width=True)
 
+
+#### 2e plot
     borough_room_price = (
         filtered_df.groupby(["neighbourhood_group", "room_type"], as_index=False)["price"]
         .median()
@@ -134,6 +138,11 @@ with tab2:
         y="price",
         color="room_type",
         barmode="group",
+        labels={
+        "neighbourhood_group_nl": "Stadsdeel",
+        "price": "Mediaanprijs",
+        "room_type_nl": "Kamertype"
+        },
         title="Mediaanprijs per stadsdeel en kamertype"
     )
 
@@ -145,31 +154,38 @@ with tab2:
 
     st.plotly_chart(fig_grouped, use_container_width=True)
 
+#### 3e plot
+
     route_price = (
         filtered_df.groupby("nearest_station_route_count", as_index=False)["price"]
-        .mean()
+        .median()
         .sort_values("nearest_station_route_count")
     )
 
-    fig_bar_routes = px.bar(
+    fig_line_routes = px.line(
         route_price,
         x="nearest_station_route_count",
         y="price",
-        title="Gemiddelde prijs per aantal metrolijnen",
+        title="Mediaanprijs per aantal metrolijnen",
         labels={
             "nearest_station_route_count": "Aantal metrolijnen in de buurt",
-            "price": "Gemiddelde prijs"
-        }
+            "price": "Mediaanprijs"
+        },
+        markers=True
     )
-    fig_bar_routes.update_xaxes(dtick=1)
-    st.plotly_chart(fig_bar_routes, use_container_width=True)
+
+    fig_line_routes.update_xaxes(dtick=1)
+
+    st.plotly_chart(fig_line_routes, use_container_width=True)
+
+
+#### 4e plot
 
     host_df = filtered_df[
         filtered_df["calculated_host_listings_count"].notna() &
         filtered_df["price"].notna()
     ].copy()
 
-    host_df = host_df[host_df["price"] < 500]
 
     def classify_host(count):
         if count == 1:
@@ -183,37 +199,42 @@ with tab2:
         else:
             return "21+ advertenties"
 
+
+    # Nieuwe kolom maken met hostgroepen
     host_df["host_listing_group"] = host_df["calculated_host_listings_count"].apply(classify_host)
 
-    group_order = ["1 advertentie", "2-5 advertenties", "6-10 advertenties", "11-20 advertenties", "21+ advertenties"]
+    group_order = [
+        "1 advertentie",
+        "2-5 advertenties",
+        "6-10 advertenties",
+        "11-20 advertenties",
+        "21+ advertenties"
+    ]
 
-    host_group_price = (
-        host_df.groupby("host_listing_group", as_index=False)["price"]
-        .mean()
-    )
-
-    host_group_price["host_listing_group"] = pd.Categorical(
-        host_group_price["host_listing_group"],
-        categories=group_order,
-        ordered=True
-    )
-
-    host_group_price = host_group_price.sort_values("host_listing_group")
-
-    fig_host_bar = px.bar(
-        host_group_price,
+    fig_host_box = px.box(
+        host_df,
         x="host_listing_group",
         y="price",
         color="host_listing_group",
-        title="Gemiddelde prijs per type host",
+        title="Prijsverdeling per type host",
+        category_orders={"host_listing_group": group_order},
         labels={
             "host_listing_group": "Type host",
-            "price": "Gemiddelde prijs"
-        }
+            "price": "Prijs"
+        },
+        points="outliers"
     )
 
-    fig_host_bar.update_layout(legend_title="Type host")
-    st.plotly_chart(fig_host_bar, use_container_width=True)
+    fig_host_box.update_layout(
+        xaxis_title="Type host",
+        yaxis_title="Prijs",
+        showlegend=False
+    )
+
+    st.plotly_chart(fig_host_box, use_container_width=True)
+
+
+
 
 
 with tab3:
@@ -221,7 +242,7 @@ with tab3:
     st.markdown("---")
 
     @st.cache_data
-    def prepare_station_data(mta_map: pd.DataFrame) -> pd.DataFrame:
+    def prepare_station_data(mta_map):
         station_df = mta_map[
             mta_map["GTFS Latitude"].notna() &
             mta_map["GTFS Longitude"].notna()
@@ -234,6 +255,8 @@ with tab3:
 
         return station_df
 
+
+### STADSDEEL SELECTBOX
     borough_options = sorted(filtered_df["neighbourhood_group"].dropna().unique().tolist())
     borough_select_options = ["Alle stadsdelen"] + borough_options
 
@@ -246,11 +269,14 @@ with tab3:
     )
 
     if selected_borough == "Alle stadsdelen":
-        borough_df = filtered_df.copy()
+        borough_df = filtered_df
     else:
         borough_df = filtered_df[
             filtered_df["neighbourhood_group"] == selected_borough
-        ].copy()
+        ]
+
+
+### BUURT SELECTBOX
 
     neighbourhood_options = sorted(borough_df["neighbourhood"].dropna().unique().tolist())
     default_hood = neighbourhood_options[0] if neighbourhood_options else None
@@ -264,9 +290,9 @@ with tab3:
     if selected_neighbourhoods:
         map_df = borough_df[
             borough_df["neighbourhood"].isin(selected_neighbourhoods)
-        ].copy()
+        ]
     else:
-        map_df = borough_df.copy()
+        map_df = borough_df
 
     if map_df.empty:
         st.warning("Er is geen data beschikbaar voor de gekozen filters.")
@@ -276,12 +302,14 @@ with tab3:
         map_df["latitude"].notna() &
         map_df["longitude"].notna() &
         map_df["price"].notna()
-    ].copy()
+    ]
 
     if valid_map_df.empty:
         st.warning("Er zijn geen geldige coördinaten beschikbaar voor deze selectie.")
         st.stop()
 
+
+#### COLUMN
     col_a, col_b, col_c = st.columns(3)
 
     with col_a:
@@ -291,7 +319,7 @@ with tab3:
         show_popup = st.checkbox("Toon popup-info", value=False)
 
     with col_c:
-        show_subway_stations = st.checkbox("Toon metrostations", value=True)
+        show_subway_stations = st.checkbox("Toon metrostations", value=False)
 
     if show_all_points:
         sample_df = valid_map_df.copy()
@@ -313,6 +341,9 @@ with tab3:
         else:
             sample_df = valid_map_df.copy()
 
+
+
+### map maken
     center_lat = sample_df["latitude"].mean()
     center_lon = sample_df["longitude"].mean()
 
@@ -324,8 +355,8 @@ with tab3:
         tiles="CartoDB positron"
     )
 
-    listing_group = folium.FeatureGroup(name="Airbnb-listings", show=True)
 
+### airbnb punt
     def get_price_color(price):
         if price < 50:
             return "green"
@@ -359,10 +390,10 @@ with tab3:
             fill_color=marker_color,
             fill_opacity=0.7,
             popup=popup_text
-        ).add_to(listing_group)
+        ).add_to(m)
 
-    listing_group.add_to(m)
 
+#### legend op map
     legend_html = """
     <div style="
         position: fixed;
@@ -386,6 +417,8 @@ with tab3:
     """
     m.get_root().html.add_child(folium.Element(legend_html))
 
+
+### metropunt
     if show_subway_stations:
         station_df = prepare_station_data(mta_map)
 
@@ -401,7 +434,7 @@ with tab3:
             (station_df["lon"] <= lon_max)
         ].copy()
 
-        stations_group = folium.FeatureGroup(name="Metrostations", show=True)
+
 
         for row in station_df.itertuples():
             folium.CircleMarker(
@@ -412,20 +445,21 @@ with tab3:
                 fill=True,
                 fill_color="white",  
                 fill_opacity=1
-            ).add_to(stations_group)
-
-        stations_group.add_to(m)
-
-    folium.LayerControl(collapsed=False).add_to(m)
+            ).add_to(m)
 
     st_folium(m, width=1400, height=750)
+
+
+
+
 with tab4:
-    st.markdown("# Prijsadviseur voor verhuurders")
+    st.markdown("# Prijschecker voor gasten")
     st.markdown("---")
 
     distance_order = ["0-250m", "250-500m", "500-1000m", "1-2km", ">2km"]
 
-    # Bovenste rij met invoervelden
+
+### select box
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -460,16 +494,17 @@ with tab4:
             key="adviser_distance"
         )
 
-    # Analyse en output onder de filters
     exact_df = df[
         (df["neighbourhood_group"] == adviser_borough) &
         (df["neighbourhood"] == adviser_neighbourhood) &
         (df["room_type"] == adviser_room_type) &
         (df["distance_category"] == adviser_distance)
-    ].copy()
+    ]
 
     used_level = "buurt + kamertype + afstand tot metro"
 
+
+### wat gebeurt als er geen genoeg data
     if len(exact_df) >= 10:
         comparable_df = exact_df
     else:
@@ -477,7 +512,7 @@ with tab4:
             (df["neighbourhood_group"] == adviser_borough) &
             (df["neighbourhood"] == adviser_neighbourhood) &
             (df["room_type"] == adviser_room_type)
-        ].copy()
+        ]
 
         if len(broader_df_1) >= 10:
             comparable_df = broader_df_1
@@ -486,50 +521,43 @@ with tab4:
             broader_df_2 = df[
                 (df["neighbourhood_group"] == adviser_borough) &
                 (df["room_type"] == adviser_room_type)
-            ].copy()
+            ]
 
             comparable_df = broader_df_2
             used_level = "stadsdeel + kamertype"
 
-    comparable_df = comparable_df[comparable_df["price"].notna()].copy()
+    comparable_df = comparable_df[comparable_df["price"].notna()]
 
+
+
+### conclusie
     if comparable_df.empty:
-        st.warning("Er is niet genoeg data beschikbaar om een prijsadvies te geven.")
+        st.warning("Er is niet genoeg data beschikbaar om een prijsinschatting te geven.")
     else:
         q25 = comparable_df["price"].quantile(0.25)
         median_price = comparable_df["price"].median()
         q75 = comparable_df["price"].quantile(0.75)
         mean_price = comparable_df["price"].mean()
         n_listings = len(comparable_df)
-
-        borough_median = df[
-            df["neighbourhood_group"] == adviser_borough
-        ]["price"].median()
-
-        neighbourhood_median = df[
-            df["neighbourhood"] == adviser_neighbourhood
-        ]["price"].median()
-
         exact_count = len(exact_df)
 
-        st.markdown("## Adviesprijs")
+        st.markdown("## Verwachte prijsrange")
 
         c1, c2 = st.columns(2)
         with c1:
-            st.success(f"Aanbevolen prijsbereik: \\${q25:.0f} - \\${q75:.0f} per nacht")
+            st.success(f"Normale prijsrange: \\${q25:.0f} - \\${q75:.0f} per nacht")
         with c2:
-            st.info(f"Referentieprijs: \\${median_price:.0f} per nacht")
+            st.info(f"Typische prijs: \\${median_price:.0f} per nacht")
 
-        st.markdown("## Vergelijkbare listings")
+
+        st.markdown("## Vergelijkbare Airbnb")
 
         m1, m2, m3, m4 = st.columns(4)
         with m1:
-            st.metric("Aantal vergelijkbare listings", n_listings)
+            st.metric("Aantal vergelijkbare accommodaties", n_listings)
         with m2:
             st.metric("Gemiddelde prijs", f"${mean_price:.0f}")
         with m3:
-            st.metric("Mediaanprijs", f"${median_price:.0f}")
+            st.metric("Typische prijs", f"${median_price:.0f}")
         with m4:
             st.metric("Exacte matches", exact_count)
-
-        
